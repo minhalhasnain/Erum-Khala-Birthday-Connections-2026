@@ -35,9 +35,36 @@ button.b:disabled{opacity:.35;cursor:default}
 #msg{text-align:center;min-height:1.5em;margin:10px 0 0;font-weight:600}
 #end{text-align:center;margin-top:18px}
 #end pre{font:inherit;font-size:1.4rem;line-height:1.3;margin:10px 0}
+
+[hidden]{display:none!important}
+body{display:block}
+main{margin:0 auto}
+.tabs{display:flex;justify-content:center;gap:4px;padding:14px 14px 0;max-width:520px;margin:0 auto}
+.tabs button{flex:1;font:inherit;font-weight:600;padding:10px 12px;border:1px solid var(--fg);background:transparent;color:var(--fg);cursor:pointer;border-radius:999px}
+.tabs button[aria-selected="true"]{background:var(--fg);color:var(--bg)}
+.tabs button:focus-visible,.sc:focus-visible,button.b:focus-visible{outline:3px solid #7a9cff;outline-offset:2px}
+:root{--s1:#b8d8f5;--s2:#f6d66b}
+#sgrid{position:relative;display:grid;grid-template-columns:repeat(6,1fr);max-width:400px;margin:8px auto 0;touch-action:none;user-select:none;-webkit-user-select:none}
+#sgrid svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+#sgrid polyline{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:16}
+.sc{aspect-ratio:1;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;font-weight:700;font-size:clamp(1.05rem,5.2vw,1.45rem);cursor:pointer}
+.sc span{width:78%;height:78%;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid transparent}
+.sc.cur span{background:var(--tile-sel);color:var(--tile-sel-fg)}
+.sc.f1 span{background:var(--s1);color:#222}
+.sc.f2 span{background:var(--s2);color:#222}
+.sc.hint span{border:2px dashed var(--fg)}
+#scount{text-align:center;font-weight:600;margin:0 0 4px}
+#sword{text-align:center;min-height:1.6em;font-size:1.2rem;font-weight:700;letter-spacing:.06em;margin:6px 0 0}
+#smsg{text-align:center;min-height:1.5em;margin:4px 0 0;color:var(--muted);font-weight:600}
+#snote{text-align:center;color:var(--muted);font-size:.9rem;margin-top:12px}
 </style>
 </head>
 <body>
+<nav class="tabs" role="tablist" aria-label="Choose a game">
+<button role="tab" id="tab-conn" aria-selected="true" data-t="conn">Connections</button>
+<button role="tab" id="tab-str" aria-selected="false" data-t="str">Strands</button>
+</nav>
+<div id="p-conn">
 <main>
 <h1>Happy Birthday, Erum! 🎂</h1>
 <p class="sub">Make four groups of four.</p>
@@ -52,6 +79,22 @@ button.b:disabled{opacity:.35;cursor:default}
 </div>
 <div id="end"></div>
 </main>
+</div>
+<div id="p-str" hidden>
+<main>
+<h1>Cakes and Candles, Erum! 🕯️</h1>
+<p class="sub">Theme: <b>Ishq Jalakar</b></p>
+<p id="scount"></p>
+<p id="sword" aria-live="polite"></p>
+<div id="sgrid" role="group" aria-label="Letter grid"></div>
+<p id="smsg" aria-live="polite">Drag across touching letters, or tap them one by one and tap the last letter again to submit.</p>
+<div class="bar">
+<button class="b" id="sclear">Clear</button>
+<button class="b main" id="shint">Hint</button>
+</div>
+<p id="snote"></p>
+</main>
+</div>
 <script>
 var G=[
 {n:"Penang",c:"var(--g1)",e:"🟧",w:["Hazelnut ice cream","Waterpark","Mosquito Patch","Chicken Rice"]},
@@ -96,6 +139,105 @@ function finish(win){
  $("cp").onclick=function(){var b=this;try{navigator.clipboard.writeText(txt).then(function(){b.textContent="Copied!"},function(){b.textContent="Copy failed"})}catch(x){b.textContent="Copy failed"}};
 }
 render();
+</script>
+
+<script>
+(function(){
+var D={"grid": ["LVERIN", "OTERUQ", "ACMUUE", "ENQKHT", "EUHECA", "ZOATHP", "MILIEM", "EBACFE"], "words": [{"w": "ERUMKHALA", "cells": [2, 9, 15, 14, 21, 26, 32, 38, 44], "sp": true}, {"w": "CHEF", "cells": [28, 34, 40, 46], "sp": false}, {"w": "UNIQUE", "cells": [10, 5, 4, 11, 16, 17], "sp": false}, {"w": "QUEEN", "cells": [20, 25, 18, 24, 19], "sp": false}, {"w": "EMPATHETIC", "cells": [47, 41, 35, 29, 23, 22, 27, 33, 39, 45], "sp": false}, {"w": "ZOMBIE", "cells": [30, 31, 36, 43, 37, 42], "sp": false}, {"w": "CATLOVER", "cells": [13, 12, 7, 0, 6, 1, 8, 3], "sp": false}]},GRID=D.grid.join("").split(""),W=D.words,COLS=6;
+var found=[],path=[],hintK=-1,misses=0,hints=0,down=false,moved=false,tapLast=false;
+var $=function(id){return document.getElementById(id)};
+var grid=$("sgrid"),NS="http://www.w3.org/2000/svg";
+var els=[];
+GRID.forEach(function(ch,i){var d=document.createElement("div");d.className="sc";d.setAttribute("data-i",i);d.innerHTML="<span></span>";d.firstChild.textContent=ch;grid.appendChild(d);els.push(d)});
+var svg=document.createElementNS(NS,"svg");svg.setAttribute("viewBox","0 0 600 800");svg.setAttribute("preserveAspectRatio","none");grid.appendChild(svg);
+function pt(i){return ((i%COLS)*100+50)+","+((Math.floor(i/COLS))*100+50)}
+function adj(a,b){return a!==b&&Math.abs(a%COLS-b%COLS)<=1&&Math.abs(Math.floor(a/COLS)-Math.floor(b/COLS))<=1}
+function fk(i){for(var k=0;k<found.length;k++)if(W[found[k]].cells.indexOf(i)>-1)return found[k];return -1}
+function last(){return path[path.length-1]}
+function line(cells,color){return cells.length>1?'<polyline stroke="'+color+'" points="'+cells.map(pt).join(" ")+'"/>':""}
+function render(){
+ var h="";
+ found.forEach(function(k){h+=line(W[k].cells,W[k].sp?"var(--s2)":"var(--s1)")});
+ h+=line(path,"var(--tile-sel)");
+ svg.innerHTML=h;
+ els.forEach(function(e,i){
+  var k=fk(i),c="sc";
+  if(k>-1)c+=W[k].sp?" f2":" f1";
+  else if(path.indexOf(i)>-1)c+=" cur";
+  if(hintK>-1&&W[hintK].cells.indexOf(i)>-1&&k<0)c+=" hint";
+  e.className=c;
+ });
+ $("sword").textContent=path.map(function(i){return GRID[i]}).join("");
+ $("scount").textContent=found.length+" of "+W.length+" words found";
+ var b=$("shint");b.textContent=hints>0?"Hint ("+hints+")":"Hint";b.disabled=hints<1||found.length===W.length;
+ $("sclear").disabled=!path.length;
+ $("snote").textContent=found.length===W.length?"":(hints>0?"You have a hint ready.":"A hint unlocks after "+(3-misses%3)+" more wrong "+(3-misses%3===1?"guess":"guesses")+".");
+}
+function say(t){$("smsg").textContent=t}
+function hit(e,tol){
+ var el=document.elementFromPoint(e.clientX,e.clientY),c=el&&el.closest?el.closest(".sc"):null;
+ if(!c)return -1;
+ var r=c.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);
+ if(Math.abs(dx)>r.width*tol||Math.abs(dy)>r.height*tol)return -1;
+ return +c.getAttribute("data-i");
+}
+function submit(){
+ var n=path.length;if(!n)return;
+ if(n<4){say("Too short. Words have at least 4 letters.");path=[];return}
+ var word=path.map(function(i){return GRID[i]}).join(""),key=path.slice().sort(function(a,b){return a-b}).join();
+ for(var k=0;k<W.length;k++){
+  if(found.indexOf(k)>-1)continue;
+  if(W[k].cells.slice().sort(function(a,b){return a-b}).join()===key){
+   found.push(k);if(hintK===k)hintK=-1;path=[];
+   if(found.length===W.length)say("You found them all! Happy birthday, Erum! 🎂");
+   else say(W[k].sp?"Spangram! Erum Khala 💛":"Found it!");
+   return;
+  }
+ }
+ var same=W.some(function(w,k){return found.indexOf(k)<0&&w.w===word});
+ if(same)say("Right word, different route. Try another path.");
+ else{misses++;if(misses%3===0){hints++;say("Not a theme word. You earned a hint!")}else say("Not a theme word.")}
+ path=[];
+}
+grid.addEventListener("pointerdown",function(e){
+ var i=hit(e,.5);if(i<0||fk(i)>-1)return;
+ down=true;moved=false;tapLast=false;
+ if(!path.length)path=[i];
+ else if(i===last())tapLast=true;
+ else if(path.indexOf(i)<0&&adj(i,last()))path.push(i);
+ else path=[i];
+ try{grid.setPointerCapture(e.pointerId)}catch(x){}
+ e.preventDefault();render();
+});
+grid.addEventListener("pointermove",function(e){
+ if(!down)return;
+ var i=hit(e,.38);if(i<0||fk(i)>-1||i===last())return;
+ if(path.length>1&&i===path[path.length-2]){path.pop();moved=true}
+ else if(path.indexOf(i)<0&&adj(i,last())){path.push(i);moved=true}
+ render();
+});
+grid.addEventListener("pointerup",function(){if(!down)return;down=false;if(moved||tapLast)submit();render()});
+grid.addEventListener("pointercancel",function(){down=false});
+$("sclear").onclick=function(){path=[];render()};
+$("shint").onclick=function(){
+ var open=[];W.forEach(function(w,k){if(found.indexOf(k)<0&&!w.sp)open.push(k)});
+ if(!open.length)W.forEach(function(w,k){if(found.indexOf(k)<0)open.push(k)});
+ if(!open.length||hints<1)return;
+ hintK=open[Math.floor(Math.random()*open.length)];hints--;
+ say("The dashed circles are the letters of a theme word.");render();
+};
+render();
+})();
+var tabs={conn:["p-conn","Happy Birthday, Erum!","connections"],str:["p-str","Cakes and Candles, Erum!","strands"]};
+function showTab(t){
+ for(var k in tabs){document.getElementById(tabs[k][0]).hidden=k!==t;document.getElementById("tab-"+k).setAttribute("aria-selected",k===t?"true":"false")}
+ document.title=tabs[t][1];
+ try{history.replaceState(null,"","#"+tabs[t][2])}catch(x){}
+}
+document.getElementById("tab-conn").onclick=function(){showTab("conn")};
+document.getElementById("tab-str").onclick=function(){showTab("str")};
+function fromHash(){showTab(location.hash==="#strands"?"str":"conn")}
+window.addEventListener("hashchange",fromHash);fromHash();
 </script>
 </body>
 </html>
